@@ -64,8 +64,11 @@ class Model():
     @staticmethod
     def interact():
         shuffle(Model.interactables)
-        for a1 in Model.interactables:
-            for a2 in Model.interactables:
+        size = len(Model.interactables)
+        for i in range(size):
+            for j in range(i, size):
+                a1 = Model.interactables[i]
+                a2 = Model.interactables[j]
                 a1.interact(a2)
 
 
