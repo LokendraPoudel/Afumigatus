@@ -23,22 +23,18 @@ class Macrophage():
 
     SPECIES_NUM = 13
 
-    def __init__(self, iron, tfbi, transferrin):
-        self.iron = iron
-        self.tfbi = tfbi
-        self.transferrin = transferrin
-        self.boolean_network = Constants.InitMacrophageBooleanState;
+    total_iron = 0
 
-        self.has_iron = False
-        self.has_tfbi = False
-        self.attached_fungus = False
-        self.iron_pool = 0;
+    def __init__(self, iron_pool = 0):
+        self.boolean_network = Constants.InitMacrophageBooleanState;
+        self.iron_pool = iron_pool;
         self.iteration = 0
         self.status = Macrophage.FREE
+        Macrophage.total_iron = Macrophage.total_iron + iron_pool
 
     def interact(self, interactable):
         if(type(interactable) is Macrophage):
-            return(None)
+            return False
         return(interactable.interact(self))
 
     def process_boolean_network(self):
@@ -53,42 +49,35 @@ class Macrophage():
                                 (self.boolean_network[Macrophage.DMT1] & self.boolean_network[Macrophage.Fe2]) | \
                                 (self.boolean_network[Macrophage.TFBI] & self.boolean_network[Macrophage.TFR]) | (-self.boolean_network[Macrophage.Fpn] + 1))
         temp[Macrophage.TFR] = self.boolean_network[Macrophage.IRP]
-        temp[Macrophage.Fe2] = 1 if self.has_iron else 0 #self.hasIron ? 1: 0
+        temp[Macrophage.Fe2] = 0 #self.hasIron ? 1: 0
         temp[Macrophage.IRP] = -self.boolean_network[Macrophage.LIP] + 1
         temp[Macrophage.Hep] = self.boolean_network[Macrophage.IL6]
         temp[Macrophage.Fpn] = (-self.boolean_network[Macrophage.IRP] + 1) | (-self.boolean_network[Macrophage.Hep] + 1)
-        temp[Macrophage.TFBI] = 1 if self.has_tfbi else 0 #self.hasTfbi ? 1: 0
-        temp[Macrophage.Bglucan] = 1 if self.attached_fungus else 0 #self.attachedFungus ? 1: 0
+        temp[Macrophage.TFBI] = 0 #self.hasTfbi ? 1: 0
+        temp[Macrophage.Bglucan] = 0 #self.attachedFungus ? 1: 0
 
         for i in range(Macrophage.SPECIES_NUM):
             self.boolean_network[i] = temp[i]
 
-        self.attached_fungus = False
+        #self.attached_fungus = False
 
-        if self.boolean_network[Macrophage.TFBI] == 1 and self.boolean_network[Macrophage.TFR] == 1:
-            qtty = Constants.BASE_QTTY * self._activation(self.tfbi.get());
-            self.tfbi.dec(qtty);
-            self.transferrin.inc(qtty);
-            self.iron_pool = self.iron_pool + qtty;
+        # if self.boolean_network[Macrophage.TFBI] == 1 and self.boolean_network[Macrophage.TFR] == 1:
+        #     qtty = Constants.BASE_QTTY * self._activation(self.tfbi.get());
+        #     self.tfbi.dec(qtty)
+        #     TransferrinBI.total_tfbi = TransferrinBI.total_tfbi - qtty
+        #     self.transferrin.inc(qtty);
+        #     Transferrin.total_transferrin = Transferrin.total_transferrin + qtty
+        #     Macrophage.total_iron = Macrophage.total_iron + qtty
+        #     self.iron_pool = self.iron_pool + qtty;
+        #
+        #
+        # if self.boolean_network[Macrophage.Fe2] == 1 and self.boolean_network[Macrophage.DMT1] == 1:
+        #     qtty = Constants.BASE_QTTY * self._activation(self.iron.get());
+        #     self.iron.dec(qtty);
+        #     Iron.total_iron = Iron.total_iron - qtty
+        #     Macrophage.total_iron = Macrophage.total_iron + qtty
+        #     self.iron_pool = self.iron_pool + qtty;
 
-
-        if self.boolean_network[Macrophage.Fe2] == 1 and self.boolean_network[Macrophage.DMT1] == 1:
-            qtty = Constants.BASE_QTTY * self._activation(self.iron.get());
-            self.iron.dec(qtty);
-            self.iron_pool = self.iron_pool + qtty;
-
-    def secrete_iron(self):
-        if (self.boolean_network[Macrophage.Fpn] == 1):
-            iron_qtty = self.iron_pool;
-            tf_qtty = Constants.BASE_QTTY * self._activation(self.transferrin.get());
-            v = Util.michaelianKinetics(iron_qtty, tf_qtty, Constants.KM);
-
-            self.iron_pool -= v;
-            self.transferrin.dec(v);
-            self.tfbi.inc(v);
-
-
-        return self.iron;
 
     def update_status(self):
         if (self.status == Macrophage.INFECTED):
@@ -97,19 +86,22 @@ class Macrophage():
                 self.iteration = 0;
                 self.status = Macrophage.FREE;
 
-    def _activation(self, level):
+    def activation(self, level):
         return(level * level / (level * level + Constants.KM * Constants.KM))
 
-    def _selected(self, level):
-        return random() < level*level/(level*level + Constants.KM*Constants.KM)
+    def selected(self, level):
+        return 1 if random() < level*level/(level*level + Constants.KM*Constants.KM) else 0
+
+    def inc_iron_pool(self, qtty):
+        self.iron_pool = self.iron_pool + qtty
+        Macrophage.total_iron = Macrophage.total_iron + qtty
 
 
 class Afumigatus():
     RESTING_CONIDIA = 0
     SWELLING_CONIDIA = 1
-    GERMINATING = 2
-    HYPHAE = 3
-    DEAD = 4
+    HYPHAE = 2
+    DEAD = 3
 
     hapX = 0
     sreA = 1
@@ -136,12 +128,11 @@ class Afumigatus():
     TAFCBI = 22
     SPECIES_NUM = 23
 
+    total_iron = 0
+    total_afumigatus = 0
 
-    def __init__(self, iron, tafc, tafcbi, ironPool = 0, status = 0, isRoot = True):
-        self.iron = iron
-        self.tafc = tafc
-        self.tafcbi = tafcbi
 
+    def __init__(self, ironPool = 0, status = 0, isRoot = True):
         self.iron_pool = ironPool
         self.status = status
         self.is_root = isRoot
@@ -154,15 +145,16 @@ class Afumigatus():
         self.next_septa = None
         self.next_branch = None
 
-        self.has_iron = False
-        self.has_tafcbi = False
+        Afumigatus.total_iron = Afumigatus.total_iron + ironPool
+        Afumigatus.total_afumigatus = Afumigatus.total_afumigatus + 1
 
     def elongate(self):
         if self.growable and self.status == Afumigatus.HYPHAE and self.boolean_network[Afumigatus.LIP] == 1:
             self.growable = False;
             self.branchable = True;
             self.iron_pool = self.iron_pool / 2.0;
-            self.next_septa = Afumigatus(self.iron, self.tafc, self.tafcbi, self.iron_pool, Afumigatus.HYPHAE, False);
+            self.next_septa = Afumigatus(0, Afumigatus.HYPHAE, False);
+            self.next_septa.iron_pool = self.iron_pool
             return self.next_septa;
         return self
 
@@ -170,31 +162,35 @@ class Afumigatus():
         if self.branchable and self.status == Afumigatus.HYPHAE and self.boolean_network[Afumigatus.LIP] == 1:
             if random() < Constants.P_BRANCH:
                 self.iron_pool = self.iron_pool / 2.0;
-                self.next_branch = Afumigatus(self.iron, self.tafc, self.tafcbi, self.iron_pool, Afumigatus.HYPHAE, False);
+                self.next_branch = Afumigatus(0, Afumigatus.HYPHAE, False);
+                self.next_branch.iron_pool = self.iron_pool
                 return self.next_branch;
             self.branchable = False;
         return self
 
     def interact(self, interactable):
-        from edu.uchc.interactable.Molecules import TransferrinBI, Transferrin, Iron
+        from edu.uchc.interactable.Molecules import Transferrin, Iron
         if type(interactable) is Afumigatus:
-            return None
+            return False
         elif type(interactable) is Iron:
-            self.has_iron = self._selected(interactable.get());
-            return None
-        elif type(interactable) is TransferrinBI:
-            return None
+            self.boolean_network[Afumigatus.Fe] = self.selected(interactable.get());
+            if self.boolean_network[Afumigatus.Fe] == 1 and self.boolean_network[Afumigatus.RIA] == 1:
+                qtty = Constants.BASE_QTTY * self.activation(interactable.get())
+                interactable.dec(qtty)
+                self.inc_iron_pool(qtty)
+            return True
         elif type(interactable) is Transferrin:
-            return None
+            return False
         elif type(interactable) is Macrophage:
-            if interactable.status == Macrophage.FREE and random() < Constants.MACROPHAGE_AFUMIGAUTS_ITER_PROB:
+            if interactable.status == Macrophage.FREE:# and random() < Constants.MACROPHAGE_AFUMIGAUTS_ITER_PROB:
                 if not (self.status == Afumigatus.RESTING_CONIDIA or self.status == Afumigatus.DEAD):
-                    interactable.attached_fungus = True
+                    interactable.boolean_network[Macrophage.Bglucan] = 1
                 if self.status == Afumigatus.SWELLING_CONIDIA or self.status == Afumigatus.RESTING_CONIDIA:
                     self.status = Afumigatus.DEAD
                     interactable.status = Macrophage.INFECTED
                     interactable.iron_pool = interactable.iron_pool + self.iron_pool
-            return None
+                    Afumigatus.total_afumigatus = Afumigatus.total_afumigatus - 1
+            return True
         return interactable.interact(self)
 
     def process_boolean_network(self):
@@ -226,28 +222,12 @@ class Afumigatus():
         temp[Afumigatus.Cat1_2] = self.boolean_network[Afumigatus.Yap1] & (-self.boolean_network[Afumigatus.HapX] + 1)
         temp[Afumigatus.ThP] = self.boolean_network[Afumigatus.Yap1];
 
-        temp[Afumigatus.Fe] = 1 if self.has_iron else 0 # might change according to iron environment?
+        temp[Afumigatus.Fe] = 0 # might change according to iron environment?
         temp[Afumigatus.O] = self.boolean_network[Afumigatus.O];
-        temp[Afumigatus.TAFCBI] = 1 if self.has_tafcbi else 0
+        temp[Afumigatus.TAFCBI] = 0
 
         for i in range(Afumigatus.SPECIES_NUM):
             self.boolean_network[i] = temp[i]
-
-        if self.boolean_network[Afumigatus.Fe] == 1 and self.boolean_network[Afumigatus.RIA] == 1:
-            qtty = Constants.BASE_QTTY * self._activation(self.iron.get())
-            self.iron.dec(qtty)
-            self.iron_pool = self.iron_pool + qtty
-
-        if self.boolean_network[Afumigatus.TAFCBI] == 1 and self.boolean_network[Afumigatus.MirB] == 1 and self.boolean_network[Afumigatus.EstB] == 1:
-            qtty = Constants.BASE_QTTY * self._activation(self.tafcbi.get())
-            self.tafcbi.dec(qtty)
-            self.iron_pool = self.iron_pool + qtty
-
-
-    def secrete_tafc(self):
-        if self.boolean_network[Afumigatus.TAFC] == 1:
-            self.tafc.inc(Constants.BASE_QTTY)
-        return self.tafc
 
     def update_status(self):
         self.iteration = self.iteration + 1
@@ -255,10 +235,10 @@ class Afumigatus():
             self.status = Afumigatus.SWELLING_CONIDIA
             self.iteration = 0
         elif self.status == Afumigatus.SWELLING_CONIDIA and self.iteration > Constants.ITER_TO_CHANGE_STATE:
-            self.status = Afumigatus.GERMINATING
-            self.iteration = 0
-        elif self.status == Afumigatus.GERMINATING and self.iteration > Constants.ITER_TO_CHANGE_STATE:
             self.status = Afumigatus.HYPHAE
+            self.iteration = 0
+        # elif self.status == Afumigatus.GERMINATING and self.iteration > Constants.ITER_TO_CHANGE_STATE:
+        #     self.status = Afumigatus.HYPHAE
 
     def diffuse_iron(self, afumigatus = None):
         if afumigatus == None:
@@ -283,8 +263,12 @@ class Afumigatus():
                 self.diffuse_iron(afumigatus.next_branch)
                 self.diffuse_iron(afumigatus.next_septa)
 
-    def _selected(self, level):
-        return random() < level * level / (level * level + Constants.KM * Constants.KM)
+    def selected(self, level):
+        return 1 if random() < level * level / (level * level + Constants.KM * Constants.KM) else 0
 
-    def _activation(self, level):
+    def activation(self, level):
         return level * level / (level * level + Constants.KM * Constants.KM)
+
+    def inc_iron_pool(self, qtty):
+        self.iron_pool = self.iron_pool + qtty
+        Afumigatus.total_iron = Afumigatus.total_iron + qtty
