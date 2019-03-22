@@ -4,42 +4,34 @@ from edu.uchc.interactable.Molecules import *
 
 class TestMacrophage(TestCase):
     def test_interact(self):
-        m1 = Macrophage(None, None, None)
-        m2 = Macrophage(None, None, None)
+        m1 = Macrophage()
+        m2 = Macrophage()
         print(m1.interact(m2))
         print()
 
 
     def test_processBooleanNetwork(self):
-        iron = Molecule(10)
-        tfbi = Molecule(10)
-        tf = Molecule(10)
-        m = Macrophage(iron, tfbi, tf)
+        m = Macrophage()
         m.has_iron = True
         m.has_tfbi = True
         print(m.boolean_network)
-        print(m.iron_pool)
         m.process_boolean_network()
         print(m.boolean_network)
-        print(m.iron_pool)
         print()
 
 
     def test_secreteIron(self):
-        iron = Molecule(10)
-        tfbi = Molecule(10)
-        tf = Molecule(10)
-        m = Macrophage(iron, tfbi, tf)
-        m.iron_pool = 10
+        tf = Transferrin(10, 0)
+        m = Macrophage(50)
         m.boolean_network[Macrophage.Fpn] = 1
-        print(str(tfbi.get()) + " " + str(m.iron_pool))
-        m.secrete_iron()
-        print(str(tfbi.get()) + " " + str(m.iron_pool))
+        print(str(tf.getTf()) + " " +str(tf.getTfBI()) + " " + str(m.iron_pool))
+        m.secrete(tf)
+        print(str(tf.getTf()) + " " +str(tf.getTfBI()) + " " + str(m.iron_pool))
         print()
 
 
     def test_updateStatus(self):
-        m = Macrophage(None, None, None)
+        m = Macrophage()
         m.status = Macrophage.INFECTED
         for i in range(Constants.ITER_TO_CHANGE_STATE):
             m.update_status()
