@@ -4,11 +4,11 @@ from edu.uchc.interactable.Molecules import *
 
 class TestIron(TestCase):
     def test_interact(self):
-        m = Macrophage(None, None, None)
+        m = Macrophage()
         iron1 = Iron(100)
         iron2 = Iron(150)
         print(iron1.interact(iron2))
         print((iron1.get(), iron2.get()))
-        print(m.has_iron)
+        print(m.boolean_network[Macrophage.Fe2])
         print(m.interact(iron1))
-        print((iron1.get(), m.has_iron))
+        print((iron1.get(), m.boolean_network[Macrophage.Fe2]))
