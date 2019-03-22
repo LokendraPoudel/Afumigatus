@@ -2,9 +2,8 @@ class Constants():
     InitAfumigatusBooleanState = [1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     InitMacrophageBooleanState = [1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1]
     BASE_QTTY = 0.1
-    KM = 10
-    ITER_TO_CHANGE_STATE = 15
-    MACROPHAGE_AFUMIGAUTS_ITER_PROB = 0.1
+    KM = 1
+    ITER_TO_CHANGE_STATE = 50
     P_BRANCH = 0.25
 
 class Util():
