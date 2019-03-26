@@ -1,6 +1,7 @@
 from edu.uchc.interactable.Cells import *
 from random import shuffle
 import random
+from random import random, randint
 
 class Model():
     aspergillus_count = 0
@@ -53,12 +54,14 @@ class Model():
             for y in range(10):
                 for z in range(10):
                     iron = Iron(0)
-                    transferrin = Transferrin(0.1, 0.1)
+                    transferrin = Transferrin(100, 100)
                     tafc = TAFC(0, 0)
+                    ros = ROS(0)
 
-                    Model.grid[x][y][z].set_agent(iron)
-                    Model.grid[x][y][z].set_agent(tafc)
-                    Model.grid[x][y][z].set_agent(transferrin)
+                    Model.grid[x][y][z].set_molecule("iron", iron)
+                    Model.grid[x][y][z].set_molecule("tafc", tafc)
+                    Model.grid[x][y][z].set_molecule("transferrin", transferrin)
+                    Model.grid[x][y][z].set_molecule("ros", ros)
 
         for x in range(10):
             for y in range(10):
@@ -70,14 +73,15 @@ class Model():
                     if z - 1 >= 0: Model.grid[x][y][z].neighbors.append(Model.grid[x][y][z - 1])
                     if z + 1 < 10: Model.grid[x][y][z].neighbors.append(Model.grid[x][y][z + 1])
 
+        for _ in range(500):
+            x = randint(1,8)
+            y = randint(1,8)
+            z = randint(1,8)
+            Model.grid[x][y][z].set_agent(Afumigatus(x=x + random(), y=y + random(), z=z+random()))
         for _ in range(50):
-            x = random.randint(0,9)
-            y = random.randint(0,9)
-            z = random.randint(0,9)
-            Model.grid[x][y][z].set_agent(Afumigatus())
-            x = random.randint(0, 9)
-            y = random.randint(0, 9)
-            z = random.randint(0, 9)
+            x = randint(0, 9)
+            y = randint(0, 9)
+            z = randint(0, 9)
             Model.grid[x][y][z].set_agent(Macrophage(0.01))
 
 
@@ -103,7 +107,7 @@ class Model():
 
     @staticmethod
     def run(iterations):
-        print("aspergillus\tiron\tTAFC\tTAFCBI\tTf\tTfBI\ttotal_tf\tAfIronPool\tMphIronPool\tTotalIron")
+        print("aspergillus\tiron\tTAFC\tTAFCBI\tTf\tTfBI\tROS\ttotal_tf\tAfIronPool\tMphIronPool\tTotalIron")
         for i in range(iterations):
             for x in range(10):
                 for y in range(10):
@@ -111,7 +115,47 @@ class Model():
                         Model.grid[x][y][z].interact()
                         Model.grid[x][y][z].update()
                         Model.grid[x][y][z].move()
+            Model.diffusion(20)
             Model.print_statistics()
+
+    @staticmethod
+    def diffusion(iterations):
+        for i in range(iterations):
+            for x in range(10):
+                for y in range(10):
+                    for z in range(10):
+                        Model.diffuse(Model.grid[x][y][z])
+
+    @staticmethod
+    def diffuse(voxel):
+        for mol in voxel.molecules:
+            if type(mol) is Iron:
+                for v in voxel.neighbors:
+                    qtty = (v.molecules["iron"].get() + mol.get())/2.0
+                    mol._iron = qtty
+                    v.molecules["iron"]._iron = qtty
+            if type(mol) is Transferrin:
+                for v in voxel.neighbors:
+                    qtty = (v.molecules["transferrin"].getTf() + mol.getTf())/2.0
+                    mol._tf = qtty
+                    v.molecules["transferrin"]._tf = qtty
+                    qtty = (v.molecules["transferrin"].getTfBI() + mol.getTfBI())/2.0
+                    mol._tfbi = qtty
+                    v.molecules["transferrin"]._tfbi = qtty
+            # if type(mol) is ROS:
+            #     for v in voxel.neighbors:
+            #         qtty = (v.molecules["ros"].get() + mol.get())/2.0
+            #         mol._ros = qtty
+            #         v.molecules["ros"]._ros = qtty
+            # if type(mol) is TAFC:
+            #     for v in voxel.neighbors:
+            #         qtty = (v.molecules["tafc"].getTafc() + mol.getTafc())/2.0
+            #         mol._tafc = qtty
+            #         v.molecules["tafc"]._tafc = qtty
+            #         qtty = (v.molecules["tafc"].getTafcbi() + mol.getTafcbi())/2.0
+            #         mol._tafcbi = qtty
+            #         v.molecules["tafc"]._tafcbi = qtty
+
 
     # @staticmethod
     # def interact():
@@ -125,11 +169,11 @@ class Model():
 
     @staticmethod
     def print_statistics():
-        print(str(Afumigatus.total_afumigatus) + "\t" + str(Iron.total_iron) + "\t" + str(TAFC.total_tafc) + "\t" + str(TAFC.total_tafcbi) + "\t" + \
-            str(Transferrin.total_transferrin) + "\t" + str(Transferrin.total_transferrinBI) + "\t" + \
-            str((Transferrin.total_transferrin + Transferrin.total_transferrinBI)) + "\t" + \
-            str(Afumigatus.total_iron) + "\t" + str(Macrophage.total_iron) + "\t" +  \
-            str((Iron.total_iron + TAFC.total_tafcbi + Transferrin.total_transferrinBI + Afumigatus.total_iron + Macrophage.total_iron)))
+        print(str(Afumigatus.total_afumigatus) + "\t" + str(Iron.total_iron) + "\t" + str(TAFC.total_tafc[0]) + "\t" + str(TAFC.total_tafc[1]) + "\t" + \
+            str(Transferrin.total_transferrin[0]) + "\t" + str(Transferrin.total_transferrin[1]) + "\t" + str(ROS.total_ros) + "\t" + \
+            str((Transferrin.total_transferrin[0] + Transferrin.total_transferrin[1])) + "\t" + \
+            str(Afumigatus.total_iron) + "\t" + str(Macrophage.total_iron) + "\t" + \
+            str((Iron.total_iron + TAFC.total_tafc[1] + Transferrin.total_transferrin[1] + Afumigatus.total_iron + Macrophage.total_iron)))
 
 
     # @staticmethod
@@ -203,4 +247,4 @@ if __name__ == "__main__":
     # Model.tfbi_qtty = 5000
 
     Model.construc_model()
-    Model.run(500)
+    Model.run(750)
