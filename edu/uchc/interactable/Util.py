@@ -1,17 +1,13 @@
 class Constants():
-    InitAfumigatusBooleanState = [1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    InitMacrophageBooleanState = [1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1]
-    BASE_QTTY = 0.1
-    KM = 1
-    ITER_TO_CHANGE_STATE = 50
+
+    K = 1
+    ITER_TO_CHANGE_STATE = 25
     P_BRANCH = 0.25
 
 class Util():
 
     @staticmethod
     def michaelianKinetics(substract1, substract2, km):
-        enzime = None
-        substract = None
         if substract1 > substract2:
             enzime = substract2
             substract = substract1
