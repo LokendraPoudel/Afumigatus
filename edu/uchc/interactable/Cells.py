@@ -2,8 +2,27 @@ from edu.uchc.interactable.Util import Constants
 from random import random
 from edu.uchc.interactable.Molecules import *
 from edu.uchc.interactable.Util import Util
+from abc import ABC, abstractmethod
 
-class Macrophage():
+class Cell(ABC):
+
+    @abstractmethod
+    def process_boolean_network(self):
+        pass
+
+    @abstractmethod
+    def update_status(self):
+        pass
+
+    @abstractmethod
+    def is_dead(self):
+        pass
+
+
+
+class Macrophage(Cell):
+    InitMacrophageBooleanState = [1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1]
+
     FREE = 0
     INFECTED = 1
 
@@ -26,9 +45,10 @@ class Macrophage():
     total_iron = 0
 
     def __init__(self, iron_pool = 0):
-        self.boolean_network = Constants.InitMacrophageBooleanState;
+        self.boolean_network = Macrophage.InitMacrophageBooleanState;
         self.iron_pool = iron_pool;
         self.iteration = 0
+        self.afumigatus = None
         self.status = Macrophage.FREE
         Macrophage.total_iron = Macrophage.total_iron + iron_pool
 
@@ -59,49 +79,37 @@ class Macrophage():
         for i in range(Macrophage.SPECIES_NUM):
             self.boolean_network[i] = temp[i]
 
-        #self.attached_fungus = False
-
-        # if self.boolean_network[Macrophage.TFBI] == 1 and self.boolean_network[Macrophage.TFR] == 1:
-        #     qtty = Constants.BASE_QTTY * self._activation(self.tfbi.get());
-        #     self.tfbi.dec(qtty)
-        #     TransferrinBI.total_tfbi = TransferrinBI.total_tfbi - qtty
-        #     self.transferrin.inc(qtty);
-        #     Transferrin.total_transferrin = Transferrin.total_transferrin + qtty
-        #     Macrophage.total_iron = Macrophage.total_iron + qtty
-        #     self.iron_pool = self.iron_pool + qtty;
-        #
-        #
-        # if self.boolean_network[Macrophage.Fe2] == 1 and self.boolean_network[Macrophage.DMT1] == 1:
-        #     qtty = Constants.BASE_QTTY * self._activation(self.iron.get());
-        #     self.iron.dec(qtty);
-        #     Iron.total_iron = Iron.total_iron - qtty
-        #     Macrophage.total_iron = Macrophage.total_iron + qtty
-        #     self.iron_pool = self.iron_pool + qtty;
-
 
     def update_status(self):
-        if (self.status == Macrophage.INFECTED):
-            self.iteration = self.iteration + 1
-            if (self.iteration >= Constants.ITER_TO_CHANGE_STATE):
-                self.iteration = 0;
-                self.status = Macrophage.FREE;
+        if self.afumigatus == None:
+            self.status = Macrophage.FREE
+        elif self.boolean_network[Macrophage.LIP] == 1:
+            self.afumigatus.status = Afumigatus.DEAD
+            self.afumigatus = None
+            self.status = Macrophage.FREE
+
+    def is_dead(self):
+        return False
 
     def activation(self, level):
-        return(level * level / (level * level + Constants.KM * Constants.KM))
+        return(level * level / (level * level + Constants.K * Constants.K))
 
     def selected(self, level):
-        return 1 if random() < level*level/(level*level + Constants.KM*Constants.KM) else 0
+        return 1 if random() < level*level/(level*level + Constants.K*Constants.K) else 0
 
     def inc_iron_pool(self, qtty):
         self.iron_pool = self.iron_pool + qtty
         Macrophage.total_iron = Macrophage.total_iron + qtty
 
 
-class Afumigatus():
+class Afumigatus(Cell):
+    InitAfumigatusBooleanState = [1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
     RESTING_CONIDIA = 0
     SWELLING_CONIDIA = 1
     HYPHAE = 2
     DEAD = 3
+    INTERNALIZED = 4
 
     hapX = 0
     sreA = 1
@@ -132,15 +140,21 @@ class Afumigatus():
     total_afumigatus = 0
 
 
-    def __init__(self, ironPool = 0, status = 0, isRoot = True):
+    def __init__(self, x=0, y=0, z=0, ironPool = 0, status = 0, isRoot = True):
         self.iron_pool = ironPool
         self.status = status
         self.is_root = isRoot
+        self.x = x
+        self.y = y
+        self.z = z
+        self.dx = 0.02*(random() - 1)
+        self.dy = 0.02*(random() - 1)
+        self.dz = 0.02*(random() - 1)
 
         self.growable = True
         self.branchable = False
         self.iteration = 0
-        self.boolean_network = Constants.InitAfumigatusBooleanState
+        self.boolean_network = Afumigatus.InitAfumigatusBooleanState
 
         self.next_septa = None
         self.next_branch = None
@@ -153,7 +167,7 @@ class Afumigatus():
             self.growable = False;
             self.branchable = True;
             self.iron_pool = self.iron_pool / 2.0;
-            self.next_septa = Afumigatus(0, Afumigatus.HYPHAE, False);
+            self.next_septa = Afumigatus(x=self.x + self.dx, y=self.y + self.dy, z=self.z + self.dz,ironPool=0, status=Afumigatus.HYPHAE, isRoot=False);
             self.next_septa.iron_pool = self.iron_pool
             return self.next_septa;
         return self
@@ -162,7 +176,8 @@ class Afumigatus():
         if self.branchable and self.status == Afumigatus.HYPHAE and self.boolean_network[Afumigatus.LIP] == 1:
             if random() < Constants.P_BRANCH:
                 self.iron_pool = self.iron_pool / 2.0;
-                self.next_branch = Afumigatus(0, Afumigatus.HYPHAE, False);
+
+                self.next_branch = Afumigatus(x=self.x, y=self.y, z=self.z, ironPool=0, status=Afumigatus.HYPHAE, isRoot=False);
                 self.next_branch.iron_pool = self.iron_pool
                 return self.next_branch;
             self.branchable = False;
@@ -175,7 +190,7 @@ class Afumigatus():
         elif type(interactable) is Iron:
             self.boolean_network[Afumigatus.Fe] = self.selected(interactable.get());
             if self.boolean_network[Afumigatus.Fe] == 1 and self.boolean_network[Afumigatus.RIA] == 1:
-                qtty = Constants.BASE_QTTY * self.activation(interactable.get())
+                qtty = Constants.K * self.activation(interactable.get())
                 interactable.dec(qtty)
                 self.inc_iron_pool(qtty)
             return True
@@ -186,10 +201,11 @@ class Afumigatus():
                 if not (self.status == Afumigatus.RESTING_CONIDIA or self.status == Afumigatus.DEAD):
                     interactable.boolean_network[Macrophage.Bglucan] = 1
                 if self.status == Afumigatus.SWELLING_CONIDIA or self.status == Afumigatus.RESTING_CONIDIA:
-                    self.status = Afumigatus.DEAD
+                    self.status = Afumigatus.INTERNALIZED
+                    interactable.afumigatus = self
                     interactable.status = Macrophage.INFECTED
-                    interactable.iron_pool = interactable.iron_pool + self.iron_pool
-                    Afumigatus.total_afumigatus = Afumigatus.total_afumigatus - 1
+                    interactable.inc_iron_pool(self.iron_pool)
+                    self.inc_iron_pool(-self.iron_pool)
             return True
         return interactable.interact(self)
 
@@ -212,20 +228,25 @@ class Afumigatus():
         temp[Afumigatus.FC0fe] = self.boolean_network[Afumigatus.SidA]
         temp[Afumigatus.FC1fe] = self.boolean_network[Afumigatus.LIP] & self.boolean_network[Afumigatus.FC0fe]
         temp[Afumigatus.VAC] = self.boolean_network[Afumigatus.LIP] & self.boolean_network[Afumigatus.CccA]
-        temp[Afumigatus.ROS] = self.boolean_network[Afumigatus.LIP] | \
-                               (self.boolean_network[Afumigatus.O] & (- (self.boolean_network[Afumigatus.SOD2_3] & self.boolean_network[Afumigatus.ThP] \
-                                                                         & self.boolean_network[Afumigatus.Cat1_2]) + 1)) \
-                               | (self.boolean_network[Afumigatus.ROS] & (- (self.boolean_network[Afumigatus.SOD2_3] \
-                                                                             & (self.boolean_network[Afumigatus.ThP] | self.boolean_network[Afumigatus.Cat1_2])) + 1))
+        # temp[Afumigatus.ROS] = self.boolean_network[Afumigatus.LIP] | \
+        #                        (self.boolean_network[Afumigatus.O] & (- (self.boolean_network[Afumigatus.SOD2_3] & self.boolean_network[Afumigatus.ThP] \
+        #                         & self.boolean_network[Afumigatus.Cat1_2]) + 1)) \
+        #                        | (self.boolean_network[Afumigatus.ROS] & (- (self.boolean_network[Afumigatus.SOD2_3] \
+        #                         & (self.boolean_network[Afumigatus.ThP] | self.boolean_network[Afumigatus.Cat1_2])) + 1))
+        temp[Afumigatus.ROS] = (self.boolean_network[Afumigatus.O] & (- (self.boolean_network[Afumigatus.SOD2_3] & self.boolean_network[Afumigatus.ThP] \
+                               & self.boolean_network[Afumigatus.Cat1_2]) + 1)) \
+                              | (self.boolean_network[Afumigatus.ROS] & (- (self.boolean_network[Afumigatus.SOD2_3] \
+                               & (self.boolean_network[Afumigatus.ThP] | self.boolean_network[Afumigatus.Cat1_2])) + 1))
         temp[Afumigatus.Yap1] = self.boolean_network[Afumigatus.ROS]
         temp[Afumigatus.SOD2_3] = self.boolean_network[Afumigatus.Yap1]
         temp[Afumigatus.Cat1_2] = self.boolean_network[Afumigatus.Yap1] & (-self.boolean_network[Afumigatus.HapX] + 1)
         temp[Afumigatus.ThP] = self.boolean_network[Afumigatus.Yap1];
 
         temp[Afumigatus.Fe] = 0 # might change according to iron environment?
-        temp[Afumigatus.O] = self.boolean_network[Afumigatus.O];
+        temp[Afumigatus.O] = 0
         temp[Afumigatus.TAFCBI] = 0
 
+        #print(self.boolean_network)
         for i in range(Afumigatus.SPECIES_NUM):
             self.boolean_network[i] = temp[i]
 
@@ -237,8 +258,16 @@ class Afumigatus():
         elif self.status == Afumigatus.SWELLING_CONIDIA and self.iteration > Constants.ITER_TO_CHANGE_STATE:
             self.status = Afumigatus.HYPHAE
             self.iteration = 0
-        # elif self.status == Afumigatus.GERMINATING and self.iteration > Constants.ITER_TO_CHANGE_STATE:
-        #     self.status = Afumigatus.HYPHAE
+
+    def is_dead(self):
+        if (self.boolean_network[Afumigatus.ROS] == 1) or self.status == Afumigatus.DEAD:
+            self.status = Afumigatus.DEAD
+            Afumigatus.total_afumigatus = Afumigatus.total_afumigatus - 1
+            return True
+        if self.status == Afumigatus.INTERNALIZED:
+            Afumigatus.total_afumigatus = Afumigatus.total_afumigatus - 1
+            return True
+        return False
 
     def diffuse_iron(self, afumigatus = None):
         if afumigatus == None:
@@ -264,10 +293,10 @@ class Afumigatus():
                 self.diffuse_iron(afumigatus.next_septa)
 
     def selected(self, level):
-        return 1 if random() < level * level / (level * level + Constants.KM * Constants.KM) else 0
+        return 1 if random() < level * level / (level * level + Constants.K * Constants.K) else 0
 
     def activation(self, level):
-        return level * level / (level * level + Constants.KM * Constants.KM)
+        return level * level / (level * level + Constants.K * Constants.K)
 
     def inc_iron_pool(self, qtty):
         self.iron_pool = self.iron_pool + qtty
