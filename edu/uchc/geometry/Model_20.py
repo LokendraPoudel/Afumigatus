@@ -10,6 +10,11 @@ import ctypes
 import os
 import queue
 import random
+import redis
+import optparse
+from vtk import *
+from vtk.util import numpy_support
+from tqdm.auto import tqdm
 
 # tissue type
 AIRWAY = "airway"
@@ -64,6 +69,20 @@ class Quadric():
         self.z_min = z_min
         self.z_max = z_max
 
+    def scaling(self, n):
+        self.a = self.a * n
+        self.b = self.b * n
+        self.c = self.c * n
+        self.r = self.r * n
+
+        self.x_max = self.x_max * n
+        self.x_min = self.x_min * n
+        self.x_max = self.x_max * n
+        self.y_max = self.y_max * n
+        self.y_min = self.y_min * n
+        self.z_min = self.z_min * n
+        self.z_max = self.z_max * n
+
 
 class Vector():
     def __init__(self, json):
@@ -88,21 +107,35 @@ class Vector():
     def get_val(self, t):
         return [self.xt(t), self.yt(t), self.zt(t)]
 
+    def scaling(self, n):
+        self.xt = self.xt * n
+        self.yt = self.yt * n
+        self.zt = self.zt * n
+        self.r = self.r * n
+
+        self.x_max = self.x_max * n
+        self.x_min = self.x_min * n
+        self.x_max = self.x_max * n
+        self.y_max = self.y_max * n
+        self.y_min = self.y_min * n
+        self.z_min = self.z_min * n
+        self.z_max = self.z_max * n
+
 
 class Geometry():
-    def __init__(self, xbin, ybin, zbin, multi_process, vessel_layer_json):
+    def __init__(self, xbin=0, ybin=0, zbin=0, multi_process=0, vessel_layer_json=None):
         self.xbin = xbin
         self.ybin = ybin
         self.zbin = zbin
         self.geo = Array(ctypes.c_double, xbin * ybin * zbin)
         self.lock = Array(ctypes.c_double, multi_process)
 
-        self.set_vessel_layer_params(vessel_layer_json)
+        if vessel_layer_json != None:
+            self.set_vessel_layer_params(vessel_layer_json)
 
         self.multi_process = multi_process
-
-        for i in range(len(self.geo)):
-            self.geo[i] = REGULAR_TISSUE
+        g = np.frombuffer(self.geo.get_obj())
+        g.fill(REGULAR_TISSUE)
 
         for i in range(len(self.lock)):
             self.lock[i] = PROCESSING
@@ -122,6 +155,27 @@ class Geometry():
         self.vessel_zmax = json["z_max"]
 
         self.interstitium = json["interstitium"]
+
+    def scaling(self, n):
+        for f in self.l:
+            f.scaling(n)
+
+        self.xbin = self.xbin * n
+        self.ybin = self.ybin * n
+        self.zbin = self.zbin * n
+
+        self.geo = Array(ctypes.c_double, self.xbin * self.ybin * self.zbin)
+        g = np.frombuffer(self.geo.get_obj())
+        g.fill(REGULAR_TISSUE)
+
+        self.vessel_xmin = self.vessel_xmin * n
+        self.vessel_xmax = self.vessel_xmax * n
+
+        self.vessel_ymin = self.vessel_ymin * n
+        self.vessel_ymax = self.vessel_ymax * n
+
+        self.vessel_zmin = self.vessel_zmin * n
+        self.vessel_zmax = self.vessel_zmax * n
 
     # check if a point is in function's domain
     def in_range(self, x, y, z, function):
@@ -189,7 +243,17 @@ class Geometry():
 
     def construct_multi(self, x_min, x_max, y_min, y_max, z_min, z_max, id, condition):
         start_time = time.time()
+
+        if id == 0:
+            print()
+            print("constructing airway...")
+            print()
+            pbar1 = tqdm(total=100)
+            update_section = 100 / (x_max - x_min)
+
         for x in range(x_min, x_max):
+            if id == 0:
+                pbar1.update(update_section)
             for y in range(y_min, y_max):
                 for z in range(z_min, z_max):
                     for function in self.l:
@@ -203,8 +267,16 @@ class Geometry():
             function.r += 1
             # print(function.r)
 
-        print("constructing epi")
+        if id == 0:
+            print()
+            print()
+            print("constructing epi...")
+            pbar1.close()
+            pbar2 = tqdm(total=100)
+
         for x in range(x_min, x_max):
+            if id == 0:
+                pbar2.update(update_section)
             for y in range(y_min, y_max):
                 for z in range(z_min, z_max):
                     for function in self.l:
@@ -217,19 +289,30 @@ class Geometry():
         for function in self.l:
             function.r += self.interstitium + 1
 
-        print("constructing vessel")
-
         section = math.ceil((self.vessel_xmin + self.vessel_xmax) / self.multi_process)
         vessel_xmin = self.vessel_xmin + section * id
         vessel_xmax = vessel_xmin + section
 
+        if id == 0:
+            print()
+            print()
+            print("constructing vessel...")
+            pbar2.close()
+            pbar3 = tqdm(total=100)
+            update_section = 100 / (vessel_xmax - vessel_xmin)
+
         for x in range(vessel_xmin, vessel_xmax):
+            if id == 0:
+                pbar3.update(update_section)
             for y in range(self.vessel_ymin, self.vessel_ymax):
                 for z in range(self.vessel_zmin, self.vessel_zmax):
                     for function in self.l:
                         self.check_geometry_type(function, x, y, z, CONSTRUCT_VESSEL)
 
-        print("--- process: " + str(os.getpid()) + " ends in %s seconds ---" % (time.time() - start_time))
+        if id == 0:
+            print()
+
+        # print("--- process: " + str(os.getpid()) + " ends in %s seconds ---" % (time.time() - start_time))
 
     def check_geometry_type(self, function, x, y, z, code):
         # print(type(function))
@@ -299,7 +382,7 @@ class Geometry():
             if (function.tissue_type == AIRWAY and g[x][y][z] == REGULAR_TISSUE):
                 g[x][y][z] = BLOOD
 
-    def write_to_file(self, filename="geometry.vtk"):
+    def write_to_vtk(self, filename = "geometry.vtk"):
         f = open(filename, "w")
         f.write("# vtk DataFile Version 4.2\n")
         f.write("Aspergillus simulation: Geometry\n")
@@ -313,6 +396,7 @@ class Geometry():
         f.write("LOOKUP_TABLE default\n")
         f.close()
 
+
         f = open(filename, "ab")
         array = np.frombuffer(self.geo.get_obj())
         array = array.astype(int)
@@ -322,33 +406,76 @@ class Geometry():
         f.close()
 
 
+# def main(argv):
+#     start_time = time.time()
+#
+#     if (len(argv) != 2):
+#         print("usage: Model_20.py <inputfile>")
+#     else:
+#         with open(argv[1]) as f:
+#             data = json.load(f)
+#
+#         dimen = data["dimension"]
+#         g = Geometry(dimen["xbin"], dimen["ybin"], dimen["zbin"], data["multi_process"], data["vessel layer"])
+#
+#         # pprint(data)
+#         for function in data["function"]:
+#
+#             if (function["type"] == QUADRIC):
+#                 f = Quadric(function)
+#                 g.add(f)
+#             elif (function["type"] == VECTOR):
+#                 f = Vector(function)
+#                 g.add(f)
+#
+#         g.construct()
+#         # g.add_epithelium()
+#         g.write_to_vtk(data["target"])
+#
+#     print("--- %s seconds ---" % (time.time() - start_time))
+
+
 def main(argv):
     start_time = time.time()
 
+    # parser = initialize_opt()
+
+    # options, args = parser.parse_args()
+
+    g = Geometry()
+
     if (len(argv) != 2):
-        print("usage: geometry.yt <inputfile>")
+        print("usage: Model_20.py <inputfile>")
     else:
         with open(argv[1]) as f:
             data = json.load(f)
 
-        dimen = data["dimension"]
-        g = Geometry(dimen["xbin"], dimen["ybin"], dimen["zbin"], data["multi_process"], data["vessel layer"])
+            dimen = data["dimension"]
+            g = Geometry(dimen["xbin"], dimen["ybin"], dimen["zbin"], data["multi_process"], data["vessel layer"])
 
-        # pprint(data)
-        for function in data["function"]:
+            # pprint(data)
+            for function in data["function"]:
 
-            if (function["type"] == QUADRIC):
-                f = Quadric(function)
-                g.add(f)
-            elif (function["type"] == VECTOR):
-                f = Vector(function)
-                g.add(f)
+                if (function["type"] == QUADRIC):
+                    f = Quadric(function)
+                    g.add(f)
+                elif (function["type"] == VECTOR):
+                    f = Vector(function)
+                    g.add(f)
 
-        g.construct()
-        # g.add_epithelium()
-        g.write_to_file(data["target"])
+            g.scaling(data["scaling"])
+            g.construct()
+            #select_output(g, options)
+            # g.add_epithelium()
+            g.write_to_vtk(data["target"])
 
-    print("--- %s seconds ---" % (time.time() - start_time))
+
+
+
+        print("--- %s seconds ---" % (time.time() - start_time))
+
+    # if options.preview:
+    #     g.preview()
 
 
 if __name__ == "__main__":
