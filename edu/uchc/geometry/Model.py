@@ -90,19 +90,24 @@ class Vector():
 
 
 class Geometry():
-    def __init__(self, xbin, ybin, zbin, multi_process, vessel_layer_json):
+    def __init__(self, xbin, ybin, zbin, grid, multi_process, vessel_layer_json):
         self.xbin = xbin
         self.ybin = ybin
         self.zbin = zbin
-        self.geo = Array(ctypes.c_double, xbin * ybin * zbin)
+        self.grid = grid
+        #self.geo = Array(ctypes.c_double, xbin * ybin * zbin)
         self.lock = Array(ctypes.c_double, multi_process)
 
         self.set_vessel_layer_params(vessel_layer_json)
 
         self.multi_process = multi_process
 
-        for i in range(len(self.geo)):
-            self.geo[i] = REGULAR_TISSUE
+        # for i in range(len(self.geo)):
+        #     self.geo[i] = REGULAR_TISSUE
+        for x in range(xbin):
+            for y in range(ybin):
+                for z in range(zbin):
+                    grid[x][y][z].tissue_type = REGULAR_TISSUE
 
         for i in range(len(self.lock)):
             self.lock[i] = PROCESSING
@@ -274,30 +279,30 @@ class Geometry():
                         break
 
     def change_tissue_type(self, function, x, y, z, code):
-        # print("geo size")
-        # print (len(geo.get_obj()))
-        g = np.frombuffer(self.geo.get_obj())
-        # print("b size")
-        # print (b.size)
-        g = g.reshape(self.zbin, self.ybin, self.xbin).transpose()
+        ## print("geo size")
+        ## print (len(geo.get_obj()))
+        #g = np.frombuffer(self.geo.get_obj())
+        ## print("b size")
+        ## print (b.size)
+        #g = g.reshape(self.zbin, self.ybin, self.xbin).transpose()
 
         if code == CONSTRUCT_BASIC:
             if (function.tissue_type == AIRWAY):
-                g[x][y][z] = AIR
+                self.grid[x][y][z].tissue_type = AIR
             elif (function.tissue_type == BLOOD_VESSEL):
-                g[x][y][z] = BLOOD
+                self.grid[x][y][z].tissue_type = BLOOD
                 # print("blood_vessel")
             else:
                 raise Exception("unknown tissue type")
 
         elif code == CONSTRUCT_EPI:
-            if (function.tissue_type == AIRWAY and g[x][y][z] == REGULAR_TISSUE):
-                g[x][y][z] = EPITHELIUM
+            if (function.tissue_type == AIRWAY and self.grid[x][y][z].tissue_type == REGULAR_TISSUE):
+                self.grid[x][y][z].tissue_type = EPITHELIUM
                 # print (x,y,z)
 
         elif code == CONSTRUCT_VESSEL:
-            if (function.tissue_type == AIRWAY and g[x][y][z] == REGULAR_TISSUE):
-                g[x][y][z] = BLOOD
+            if (function.tissue_type == AIRWAY and self.grid[x][y][z].tissue_type == REGULAR_TISSUE):
+                self.grid[x][y][z].tissue_type = BLOOD
 
     def write_to_file(self, filename="geometry.vtk"):
         f = open(filename, "w")
