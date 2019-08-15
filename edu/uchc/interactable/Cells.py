@@ -1,8 +1,11 @@
 from edu.uchc.interactable.Util import Constants
 from random import random
+from random import randint
 from edu.uchc.interactable.Molecules import *
 from edu.uchc.interactable.Util import Util
 from abc import ABC, abstractmethod
+import numpy as np
+import math
 
 class Cell(ABC):
 
@@ -81,21 +84,24 @@ class Macrophage(Cell):
 
 
     def update_status(self):
-        if self.afumigatus == None:
+        if self.status == Macrophage.INFECTED:
+            self.iteration += 1
+        if self.afumigatus == None and self.iteration == Constants.ITER_TO_LYMPHOCYTES_CHANGE_STATE:
             self.status = Macrophage.FREE
-        elif self.boolean_network[Macrophage.LIP] == 1:
+            self.iteration = 0
+        elif self.afumigatus != None and self.boolean_network[Macrophage.LIP] == 1:
             self.afumigatus.status = Afumigatus.DEAD
             self.afumigatus = None
-            self.status = Macrophage.FREE
+            self.iteration = 0
 
     def is_dead(self):
         return False
 
-    def activation(self, level):
-        return(level * level / (level * level + Constants.K * Constants.K))
-
-    def selected(self, level):
-        return 1 if random() < level*level/(level*level + Constants.K*Constants.K) else 0
+#    def activation(self, level, K=Constants.K):
+#        return(level * level / (level * level + K * K))
+#
+#    def selected(self, level, K=Constants.K):
+#        return 1 if random() < level*level/(level*level + K*K) else 0
 
     def inc_iron_pool(self, qtty):
         self.iron_pool = self.iron_pool + qtty
@@ -158,16 +164,20 @@ class Afumigatus(Cell):
 
         self.next_septa = None
         self.next_branch = None
+        self.previous_septa = None
+        self.Fe = False
 
         Afumigatus.total_iron = Afumigatus.total_iron + ironPool
         Afumigatus.total_afumigatus = Afumigatus.total_afumigatus + 1
 
     def elongate(self):
+        #print((self.growable, self.status == Afumigatus.HYPHAE, self.boolean_network[Afumigatus.LIP]))
         if self.growable and self.status == Afumigatus.HYPHAE and self.boolean_network[Afumigatus.LIP] == 1:
             self.growable = False;
             self.branchable = True;
             self.iron_pool = self.iron_pool / 2.0;
-            self.next_septa = Afumigatus(x=self.x + self.dx, y=self.y + self.dy, z=self.z + self.dz,ironPool=0, status=Afumigatus.HYPHAE, isRoot=False);
+            self.next_septa = Afumigatus(x=self.x + self.dx, y=self.y + self.dy, z=self.z + self.dz,ironPool=0, status=Afumigatus.HYPHAE, isRoot=False)
+            self.next_septa.previous_septa = self
             self.next_septa.iron_pool = self.iron_pool
             return self.next_septa;
         return self
@@ -175,10 +185,17 @@ class Afumigatus(Cell):
     def branch(self):
         if self.branchable and self.status == Afumigatus.HYPHAE and self.boolean_network[Afumigatus.LIP] == 1:
             if random() < Constants.P_BRANCH:
-                self.iron_pool = self.iron_pool / 2.0;
+                self.iron_pool = self.iron_pool / 2.0
+                growth_vector = [self.dx, self.dy, self.dz]
+                B = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], growth_vector])
+                B_inv = np.linalg.inv(B)
+                R = Util.rotatation_matrix(2*random()*math.pi)
+                R = np.dot(B, np.dot(R, B_inv))
+                growth_vector = np.dot(R, growth_vector)
 
-                self.next_branch = Afumigatus(x=self.x, y=self.y, z=self.z, ironPool=0, status=Afumigatus.HYPHAE, isRoot=False);
+                self.next_branch = Afumigatus(x=self.x + growth_vector[0], y=self.y + growth_vector[1], z=self.z + growth_vector[2], ironPool=0, status=Afumigatus.HYPHAE, isRoot=False);
                 self.next_branch.iron_pool = self.iron_pool
+                self.next_branch.previous_septa = self
                 return self.next_branch;
             self.branchable = False;
         return self
@@ -188,9 +205,9 @@ class Afumigatus(Cell):
         if type(interactable) is Afumigatus:
             return False
         elif type(interactable) is Iron:
-            self.boolean_network[Afumigatus.Fe] = self.selected(interactable.get());
-            if self.boolean_network[Afumigatus.Fe] == 1 and self.boolean_network[Afumigatus.RIA] == 1:
-                qtty = Constants.K * self.activation(interactable.get())
+            if self.boolean_network[Afumigatus.RIA] == 1 and Util.hillProbability(interactable.get()) > random():
+                qtty = interactable.get() * Constants.UPTAKE_QTTY
+                self.boolean_network[Afumigatus.Fe] = 1
                 interactable.dec(qtty)
                 self.inc_iron_pool(qtty)
             return True
@@ -198,19 +215,22 @@ class Afumigatus(Cell):
             return False
         elif type(interactable) is Macrophage:
             if interactable.status == Macrophage.FREE:# and random() < Constants.MACROPHAGE_AFUMIGAUTS_ITER_PROB:
+                if not self.status == Afumigatus.DEAD:
+                    interactable.status = Macrophage.INFECTED
                 if not (self.status == Afumigatus.RESTING_CONIDIA or self.status == Afumigatus.DEAD):
                     interactable.boolean_network[Macrophage.Bglucan] = 1
-                if self.status == Afumigatus.SWELLING_CONIDIA or self.status == Afumigatus.RESTING_CONIDIA:
-                    self.status = Afumigatus.INTERNALIZED
-                    interactable.afumigatus = self
-                    interactable.status = Macrophage.INFECTED
-                    interactable.inc_iron_pool(self.iron_pool)
-                    self.inc_iron_pool(-self.iron_pool)
+                #if self.status == Afumigatus.SWELLING_CONIDIA or self.status == Afumigatus.RESTING_CONIDIA:
+                    #self.status = Afumigatus.INTERNALIZED
+                    #interactable.afumigatus = self
+                    #interactable.inc_iron_pool(self.iron_pool)
+                    #self.inc_iron_pool(-self.iron_pool)
             return True
         return interactable.interact(self)
 
     def process_boolean_network(self):
         temp = [0 for i in range(Afumigatus.SPECIES_NUM)]
+
+        self.has_iron()
 
         temp[Afumigatus.hapX] = -self.boolean_network[Afumigatus.SreA] + 1
         temp[Afumigatus.sreA] = -self.boolean_network[Afumigatus.HapX] + 1
@@ -223,7 +243,7 @@ class Afumigatus(Cell):
         temp[Afumigatus.TAFC] = self.boolean_network[Afumigatus.SidA]
         temp[Afumigatus.ICP] = (-self.boolean_network[Afumigatus.HapX] + 1) & (self.boolean_network[Afumigatus.VAC] | self.boolean_network[Afumigatus.FC1fe])
         temp[Afumigatus.LIP] = ((self.boolean_network[Afumigatus.TAFCBI] & self.boolean_network[Afumigatus.MirB] & self.boolean_network[Afumigatus.EstB]) | \
-                                (self.boolean_network[Afumigatus.Fe] & self.boolean_network[Afumigatus.RIA]))
+                                (self.boolean_network[Afumigatus.Fe] & self.boolean_network[Afumigatus.RIA]) | (1 if self.Fe else 0))
         temp[Afumigatus.CccA] = -self.boolean_network[Afumigatus.HapX] + 1
         temp[Afumigatus.FC0fe] = self.boolean_network[Afumigatus.SidA]
         temp[Afumigatus.FC1fe] = self.boolean_network[Afumigatus.LIP] & self.boolean_network[Afumigatus.FC0fe]
@@ -251,22 +271,24 @@ class Afumigatus(Cell):
             self.boolean_network[i] = temp[i]
 
     def update_status(self):
-        self.iteration = self.iteration + 1
-        if self.status == Afumigatus.RESTING_CONIDIA and self.iteration > Constants.ITER_TO_CHANGE_STATE:
+        if self.status != Afumigatus.HYPHAE:
+            self.iteration = self.iteration + 1
+        if self.status == Afumigatus.RESTING_CONIDIA and self.iteration > Constants.ITER_TO_AFUMIGATUS_CHANGE_STATE:
             self.status = Afumigatus.SWELLING_CONIDIA
             self.iteration = 0
-        elif self.status == Afumigatus.SWELLING_CONIDIA and self.iteration > Constants.ITER_TO_CHANGE_STATE:
+        elif self.status == Afumigatus.SWELLING_CONIDIA and self.iteration > Constants.ITER_TO_AFUMIGATUS_CHANGE_STATE:
             self.status = Afumigatus.HYPHAE
             self.iteration = 0
 
     def is_dead(self):
-        if (self.boolean_network[Afumigatus.ROS] == 1) or self.status == Afumigatus.DEAD:
-            self.status = Afumigatus.DEAD
-            Afumigatus.total_afumigatus = Afumigatus.total_afumigatus - 1
-            return True
-        if self.status == Afumigatus.INTERNALIZED:
-            Afumigatus.total_afumigatus = Afumigatus.total_afumigatus - 1
-            return True
+        #if (self.boolean_network[Afumigatus.ROS] == 1) or self.status == Afumigatus.DEAD:
+        #    self.status = Afumigatus.DEAD
+        #    Afumigatus.total_afumigatus = Afumigatus.total_afumigatus - 1
+        #    #if self.previous_septa != None: self.previous_septa.growable = self.growable
+        #    return True
+        #if self.status == Afumigatus.INTERNALIZED:
+        #    #Afumigatus.total_afumigatus = Afumigatus.total_afumigatus - 1
+        #    return False
         return False
 
     def diffuse_iron(self, afumigatus = None):
@@ -292,12 +314,72 @@ class Afumigatus(Cell):
                 self.diffuse_iron(afumigatus.next_branch)
                 self.diffuse_iron(afumigatus.next_septa)
 
-    def selected(self, level):
-        return 1 if random() < level * level / (level * level + Constants.K * Constants.K) else 0
+#    def selected(self, level):
+#        return 1 if random() < level * level / (level * level + Constants.K * Constants.K) else 0
+#
+#    def activation(self, level):
+#        return level * level / (level * level + Constants.K * Constants.K)
 
-    def activation(self, level):
-        return level * level / (level * level + Constants.K * Constants.K)
+    def has_iron(self):
+        self.Fe = Util.hillProbability(self.iron_pool, Constants.Kma) > random()
 
     def inc_iron_pool(self, qtty):
         self.iron_pool = self.iron_pool + qtty
         Afumigatus.total_iron = Afumigatus.total_iron + qtty
+
+class Neutrophil(Cell):
+
+    total_iron = 0
+    FREE = 0
+    INTERACTING = 1
+    ANERGIC = 2
+
+    def __init__(self, iron_pool):
+        self.iron_pool = iron_pool
+        Neutrophil.total_iron = Neutrophil.total_iron + iron_pool
+        self.iteration = 0
+        self.status = Neutrophil.FREE
+        self.has_interacted_with_afumigatus = False
+
+    def process_boolean_network(self):
+        pass
+
+    def update_status(self):
+        if self.status == Neutrophil.INTERACTING:
+            self.status == Neutrophil.ANERGIC
+        if self.status == Neutrophil.ANERGIC:
+            self.iteration += 1
+        if self.iteration == Constants.ITER_TO_LYMPHOCYTES_CHANGE_STATE:
+            self.status = Neutrophil.FREE
+            self.iteration = 0
+
+    def is_dead(self):
+        return False
+
+    def inc_iron_pool(self, qtty):
+        self.iron_pool = self.iron_pool + qtty
+        Neutrophil.total_iron = Neutrophil.total_iron + qtty
+
+    def interact(self, interactable):
+        if type(interactable) is Neutrophil:
+            return False
+        if type(interactable) is Afumigatus:
+            self.status = Neutrophil.INTERACTING
+            return True
+        if type(interactable) is Macrophage:
+            return False
+        if type(interactable) is Transferrin:
+            return False
+        if type(interactable) is TAFC:
+            return False
+        if type(interactable) is Iron:
+            return False
+        if type(interactable) is ROS:
+            return False
+        return interactable.interact(self)
+
+#    def selected(self, level):
+#        return 1 if random() < level * level / (level * level + Constants.K * Constants.K) else 0
+#
+#    def activation(self, level):
+#        return level * level / (level * level + Constants.K * Constants.K)
